@@ -9,5 +9,5 @@ libpgf_la_SOURCES = \
 	PGFimage.cpp \
 	PGFstream.cpp \
 	Subband.cpp \
-	WaveletTransform.cpp  
+	WaveletTransform.cpp
 
