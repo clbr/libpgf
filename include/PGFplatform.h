@@ -57,14 +57,14 @@
 // ROI support
 //-------------------------------------------------------------------------------
 #ifndef NPGFROI
-#define __PGFROISUPPORT__ // without ROI support the program code gets simpler and smaller
+//#define __PGFROISUPPORT__ // without ROI support the program code gets simpler and smaller
 #endif
 
 //-------------------------------------------------------------------------------
 // 32 bit per channel support
 //-------------------------------------------------------------------------------
 #ifndef NPGF32
-#define __PGF32SUPPORT__ // without 32 bit the memory consumption during encoding and decoding is much lesser
+//#define __PGF32SUPPORT__ // without 32 bit the memory consumption during encoding and decoding is much lesser
 #endif
 
 //-------------------------------------------------------------------------------
