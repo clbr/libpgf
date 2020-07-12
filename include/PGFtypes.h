@@ -100,6 +100,12 @@ enum Orientation		{ LL = 0, HL = 1, LH = 2, HH = 3 };
 enum ProgressMode		{ PM_Relative, PM_Absolute };
 enum UserdataPolicy		{ UP_Skip = 0, UP_CachePrefix = 1, UP_CacheAll = 2 };
 
+enum SignCompression {
+	SC_NONE,
+	SC_FSE,
+	SC_LZ4,
+};
+
 /// general PGF file structure
 /// PGFPreHeader PGFHeader [PGFPostHeader] LevelLengths Level_n-1 Level_n-2 ... Level_0
 /// PGFPostHeader ::= [ColorTable] [UserData]

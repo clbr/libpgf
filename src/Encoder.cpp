@@ -32,6 +32,7 @@
 #endif
 
 #include "fse/fse.h"
+#include "lz4/lz4hc.h"
 
 //////////////////////////////////////////////////////
 // PGF: file structure
@@ -434,15 +435,35 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 		count = outsize;
 		m_stream->Write(&count, zopbuf);
 
-/*	outsize = LZ4_compress_HC((const char *) packedsign, (char *) zopbuf,
-					2048, 16384, 16);
+		const size_t lz4len = LZ4_compress_HC((const char *) packedsign,
+							(char *) zopbuf,
+							2048, 16384, 16);
+		const size_t fselen = FSE_compress(zopbuf + 16384, 16384, packedsign, 2048);
 
-	count = sizeof(UINT16);
-	m_stream->Write(&count, &outsize);
-	count = outsize;
-	m_stream->Write(&count, zopbuf);*/
-		count = 2048;
-		m_stream->Write(&count, packedsign);
+		// Sometimes LZ4 beats FSE, sometimes it's incompressible
+		SignCompression type = SC_NONE;
+		if (fselen < lz4len && fselen > 2)
+			type = SC_FSE;
+		else if (lz4len < 2040)
+			type = SC_LZ4;
+
+		count = 1;
+		m_stream->Write(&count, &type);
+
+		if (type == SC_NONE) {
+			count = 2048;
+			m_stream->Write(&count, packedsign);
+		} else if (type == SC_FSE) {
+			count = sizeof(UINT16);
+			m_stream->Write(&count, (void *) &fselen);
+			count = fselen;
+			m_stream->Write(&count, zopbuf + 16384);
+		} else {
+			count = sizeof(UINT16);
+			m_stream->Write(&count, (void *) &lz4len);
+			count = lz4len;
+			m_stream->Write(&count, zopbuf);
+		}
 	} else {
 		// Both buffers all zero, encode this as u16 zero
 		int count = sizeof(UINT16);

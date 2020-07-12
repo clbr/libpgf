@@ -32,6 +32,7 @@
 #endif
 
 #include "fse/fse.h"
+#include "lz4/lz4.h"
 
 //////////////////////////////////////////////////////
 // PGF: file structure
@@ -566,13 +567,34 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 		m_stream->Read(&count, tmpbuf);
 		if (count != expected) ReturnWithError(MissingData);
 
-		count = expected = 2048;
-		m_stream->Read(&count, packedsign);
-		if (count != expected) ReturnWithError(MissingData);
-
-		// Unpack
 		FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
 
+		UINT8 type;
+		count = expected = 1;
+		m_stream->Read(&count, &type);
+		if (count != expected) ReturnWithError(MissingData);
+
+		if (type == SC_NONE) {
+			count = expected = 2048;
+			m_stream->Read(&count, packedsign);
+		} else {
+			count = expected = sizeof(UINT16);
+			m_stream->Read(&count, &wordLen);
+			if (count != expected) ReturnWithError(MissingData);
+			count = expected = wordLen;
+			m_stream->Read(&count, tmpbuf);
+			if (count != expected) ReturnWithError(MissingData);
+
+			if (type == SC_FSE) {
+				FSE_decompress(packedsign, 2048, tmpbuf, wordLen);
+			} else {
+				LZ4_decompress_safe((const char *) tmpbuf,
+							(char *) packedsign,
+							wordLen, 2048);
+			}
+		}
+
+		// Unpack
 		for (i = 0; i < BufferSize; i++) {
 			const bool neg = packedsign[i / 8] & (1 << (i % 8));
 			block->m_value[i] = neg ? -absbuf[i] : absbuf[i];
