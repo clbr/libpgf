@@ -31,6 +31,8 @@
 	#include <stdio.h>
 #endif
 
+#include "fse/fse.h"
+
 //////////////////////////////////////////////////////
 // PGF: file structure
 //
@@ -498,7 +500,7 @@ void CDecoder::DecodeBuffer() {
 	if (m_macroBlockLen == 1) {
 		ASSERT(m_currentBlock);
 		ReadMacroBlock(m_currentBlock);
-		m_currentBlock->BitplaneDecode();
+		//m_currentBlock->BitplaneDecode();
 		m_macroBlocksAvailable = 1;
 	} else {
 		m_macroBlocksAvailable = 0;
@@ -538,6 +540,8 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 	UINT16 wordLen;
 	ROIBlockHeader h(BufferSize);
 	int count, expected;
+	UINT8 absbuf[BufferSize], tmpbuf[BufferSize], packedsign[2048];
+	UINT32 i;
 
 #ifdef TRACE
 	//UINT32 filePos = (UINT32)m_stream->GetPos();
@@ -551,36 +555,28 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 	wordLen = __VAL(wordLen); // convert wordLen
 	if (wordLen > BufferSize) ReturnWithError(FormatCannotRead);
 
-#ifdef __PGFROISUPPORT__
-	// read ROIBlockHeader
-	if (m_roi) {
-		count = expected = sizeof(ROIBlockHeader);
-		m_stream->Read(&count, &h.val);
-		if (count != expected) ReturnWithError(MissingData);
-		h.val = __VAL(h.val); // convert ROIBlockHeader
-	}
-#endif
 	// save header
 	block->m_header = h;
 
 	// read data
-	count = expected = wordLen*WordBytes;
-	m_stream->Read(&count, block->m_codeBuffer);
+	count = expected = wordLen;
+	m_stream->Read(&count, tmpbuf);
 	if (count != expected) ReturnWithError(MissingData);
 
-#ifdef PGF_USE_BIG_ENDIAN
-	// convert data
-	count /= WordBytes;
-	for (int i=0; i < count; i++) {
-		block->m_codeBuffer[i] = __VAL(block->m_codeBuffer[i]);
-	}
-#endif
+	count = expected = 2048;
+	m_stream->Read(&count, packedsign);
+	if (count != expected) ReturnWithError(MissingData);
 
-#ifdef __PGFROISUPPORT__
-	ASSERT(m_roi && h.rbh.bufferSize <= BufferSize || h.rbh.bufferSize == BufferSize);
-#else
 	ASSERT(h.rbh.bufferSize == BufferSize);
-#endif
+	block->m_valuePos = 0;
+
+	// Unpack
+	FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
+
+	for (i = 0; i < BufferSize; i++) {
+		const bool neg = packedsign[i / 8] & (1 << (i % 8));
+		block->m_value[i] = neg ? -absbuf[i] : absbuf[i];
+	}
 }
 
 #ifdef __PGFROISUPPORT__
