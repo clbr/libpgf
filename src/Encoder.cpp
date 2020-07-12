@@ -31,6 +31,8 @@
 	#include <stdio.h>
 #endif
 
+#include "fse/fse.h"
+
 //////////////////////////////////////////////////////
 // PGF: file structure
 //
@@ -349,7 +351,7 @@ void CEncoder::EncodeBuffer(ROIBlockHeader h) {
 
 	// macro block management
 	if (m_macroBlockLen == 1) {
-		m_currentBlock->BitplaneEncode();
+		//m_currentBlock->BitplaneEncode();
 		WriteMacroBlock(m_currentBlock);
 	} else {
 		// save last level index
@@ -405,51 +407,39 @@ void CEncoder::EncodeBuffer(ROIBlockHeader h) {
 // It might throw an IOException.
 void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 	ASSERT(block);
-#ifdef __PGFROISUPPORT__
-	ROIBlockHeader h = block->m_header;
-#endif
-	UINT16 wordLen = UINT16(NumberOfWords(block->m_codePos)); ASSERT(wordLen <= CodeBufferLen);
-	int count = sizeof(UINT16);
 
 #ifdef TRACE
 	//UINT32 filePos = (UINT32)m_stream->GetPos();
 	//printf("EncodeBuffer: %d\n", filePos);
 #endif
 
-#ifdef PGF_USE_BIG_ENDIAN
-	// write wordLen
-	UINT16 wl = __VAL(wordLen);
-	m_stream->Write(&count, &wl); ASSERT(count == sizeof(UINT16));
+	UINT8 absbuf[16384], packedsign[2048], zopbuf[32768];
+	unsigned i;
 
-#ifdef __PGFROISUPPORT__
-	// write ROIBlockHeader
-	if (m_roi) {
-		count = sizeof(ROIBlockHeader);
-		h.val = __VAL(h.val);
-		m_stream->Write(&count, &h.val); ASSERT(count == sizeof(ROIBlockHeader));
+	memset(packedsign, 0, 2048);
+	for (i = 0; i < 16384; i++) {
+		absbuf[i] = abs(block->m_value[i]);
+		packedsign[i / 8] |= (block->m_value[i] < 0 ? 1 : 0) << (i % 8);
 	}
-#endif // __PGFROISUPPORT__
 
-	// convert data
-	for (int i=0; i < wordLen; i++) {
-		block->m_codeBuffer[i] = __VAL(block->m_codeBuffer[i]);
-	}
-#else
-	// write wordLen
-	m_stream->Write(&count, &wordLen); ASSERT(count == sizeof(UINT16));
+	size_t outsize = FSE_compress(zopbuf, 32768, absbuf, 16384);
+	if (outsize < 2)
+		abort();
 
-#ifdef __PGFROISUPPORT__
-	// write ROIBlockHeader
-	if (m_roi) {
-		count = sizeof(ROIBlockHeader);
-		m_stream->Write(&count, &h.val); ASSERT(count == sizeof(ROIBlockHeader));
-	}
-#endif // __PGFROISUPPORT__
-#endif // PGF_USE_BIG_ENDIAN
+	int count = sizeof(UINT16);
+	m_stream->Write(&count, &outsize);
+	count = outsize;
+	m_stream->Write(&count, zopbuf);
 
-	// write encoded data into stream
-	count = wordLen*WordBytes;
-	m_stream->Write(&count, block->m_codeBuffer);
+/*	outsize = LZ4_compress_HC((const char *) packedsign, (char *) zopbuf,
+					2048, 16384, 16);
+
+	count = sizeof(UINT16);
+	m_stream->Write(&count, &outsize);
+	count = outsize;
+	m_stream->Write(&count, zopbuf);*/
+	count = 2048;
+	m_stream->Write(&count, packedsign);
 
 	// store levelLength
 	if (m_levelLength) {
