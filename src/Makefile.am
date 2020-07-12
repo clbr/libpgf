@@ -11,6 +11,11 @@ libpgf_la_SOURCES = \
 	Subband.cpp \
 	WaveletTransform.cpp \
 	\
+	fse/entropy_common.c \
+	fse/fse_compress.c \
+	fse/fse_decompress.c \
+	fse/hist.c \
+	\
 	lz4/lz4.c \
 	lz4/lz4hc.c
 
