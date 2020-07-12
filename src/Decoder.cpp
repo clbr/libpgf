@@ -559,24 +559,28 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 	block->m_header = h;
 
 	// read data
-	count = expected = wordLen;
-	m_stream->Read(&count, tmpbuf);
-	if (count != expected) ReturnWithError(MissingData);
+	if (!wordLen) {
+		memset(block->m_value, 0, sizeof(DataT) * BufferSize);
+	} else {
+		count = expected = wordLen;
+		m_stream->Read(&count, tmpbuf);
+		if (count != expected) ReturnWithError(MissingData);
 
-	count = expected = 2048;
-	m_stream->Read(&count, packedsign);
-	if (count != expected) ReturnWithError(MissingData);
+		count = expected = 2048;
+		m_stream->Read(&count, packedsign);
+		if (count != expected) ReturnWithError(MissingData);
+
+		// Unpack
+		FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
+
+		for (i = 0; i < BufferSize; i++) {
+			const bool neg = packedsign[i / 8] & (1 << (i % 8));
+			block->m_value[i] = neg ? -absbuf[i] : absbuf[i];
+		}
+	}
 
 	ASSERT(h.rbh.bufferSize == BufferSize);
 	block->m_valuePos = 0;
-
-	// Unpack
-	FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
-
-	for (i = 0; i < BufferSize; i++) {
-		const bool neg = packedsign[i / 8] & (1 << (i % 8));
-		block->m_value[i] = neg ? -absbuf[i] : absbuf[i];
-	}
 }
 
 #ifdef __PGFROISUPPORT__
