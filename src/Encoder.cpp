@@ -443,6 +443,8 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 	m_stream->Write(&count, &outsize);
 	count = outsize;
 	m_stream->Write(&count, zopbuf);*/
+	count = 2048;
+	m_stream->Write(&count, packedsign);
 
 	free(zopbuf);
 
