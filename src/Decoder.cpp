@@ -31,7 +31,7 @@
 	#include <stdio.h>
 #endif
 
-#include "fse/fse.h"
+#include <zlib.h>
 
 //////////////////////////////////////////////////////
 // PGF: file structure
@@ -571,7 +571,17 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 		if (count != expected) ReturnWithError(MissingData);
 
 		// Unpack
-		FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
+		//FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
+		z_stream str;
+		memset(&str, 0, sizeof(z_stream));
+		str.next_in = tmpbuf;
+		str.avail_in = wordLen;
+		inflateInit2(&str, -15);
+
+		str.next_out = absbuf;
+		str.avail_out = BufferSize;
+		inflate(&str, Z_NO_FLUSH);
+		inflateEnd(&str);
 
 		for (i = 0; i < BufferSize; i++) {
 			const bool neg = packedsign[i / 8] & (1 << (i % 8));
