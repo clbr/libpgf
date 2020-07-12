@@ -31,7 +31,7 @@
 	#include <stdio.h>
 #endif
 
-#include "zopfli.h"
+#include "fse/fse.h"
 
 //////////////////////////////////////////////////////
 // PGF: file structure
@@ -60,8 +60,6 @@
 #define CodeBufferBitLen		(CodeBufferLen*WordWidth)	///< max number of bits in m_codeBuffer
 #define MaxCodeLen				((1 << RLblockSizeLen) - 1)	///< max length of RL encoded block
 
-static struct ZopfliOptions zopt;
-
 //////////////////////////////////////////////////////
 /// Write pre-header, header, postHeader, and levelLength.
 /// It might throw an IOException.
@@ -87,9 +85,6 @@ CEncoder::CEncoder(CPGFStream* stream, PGFPreHeader preHeader, PGFHeader header,
 	int count;
 	m_lastMacroBlock = 0;
 	m_levelLength = nullptr;
-
-	ZopfliInitOptions(&zopt);
-	zopt.numiterations = 64;
 
 	// set number of threads
 #ifdef LIBPGF_USE_OPENMP
@@ -418,7 +413,7 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 	//printf("EncodeBuffer: %d\n", filePos);
 #endif
 
-	UINT8 absbuf[16384], packedsign[2048], *zopbuf;
+	UINT8 absbuf[16384], packedsign[2048], zopbuf[32768];
 	unsigned i;
 
 	memset(packedsign, 0, 2048);
@@ -427,9 +422,9 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 		packedsign[i / 8] |= (block->m_value[i] < 0 ? 1 : 0) << (i % 8);
 	}
 
-	zopbuf = NULL;
-	size_t outsize = 0;
-	ZopfliCompress(&zopt, ZOPFLI_FORMAT_DEFLATE, absbuf, 16384, &zopbuf, &outsize);
+	size_t outsize = FSE_compress(zopbuf, 32768, absbuf, 16384);
+	if (outsize < 2)
+		abort();
 
 	int count = sizeof(UINT16);
 	m_stream->Write(&count, &outsize);
@@ -445,8 +440,6 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 	m_stream->Write(&count, zopbuf);*/
 	count = 2048;
 	m_stream->Write(&count, packedsign);
-
-	free(zopbuf);
 
 	// store levelLength
 	if (m_levelLength) {
