@@ -414,22 +414,25 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 #endif
 
 	UINT8 absbuf[16384], packedsign[2048], zopbuf[32768];
-	unsigned i;
+	unsigned i, zerocheck = 0;
 
 	memset(packedsign, 0, 2048);
 	for (i = 0; i < 16384; i++) {
 		absbuf[i] = abs(block->m_value[i]);
 		packedsign[i / 8] |= (block->m_value[i] < 0 ? 1 : 0) << (i % 8);
+
+		zerocheck |= absbuf[i] | packedsign[i / 8];
 	}
 
-	size_t outsize = FSE_compress(zopbuf, 32768, absbuf, 16384);
-	if (outsize < 2)
-		abort();
+	if (zerocheck) {
+		size_t outsize = FSE_compress(zopbuf, 32768, absbuf, 16384);
+		if (outsize < 2)
+			abort();
 
-	int count = sizeof(UINT16);
-	m_stream->Write(&count, &outsize);
-	count = outsize;
-	m_stream->Write(&count, zopbuf);
+		int count = sizeof(UINT16);
+		m_stream->Write(&count, &outsize);
+		count = outsize;
+		m_stream->Write(&count, zopbuf);
 
 /*	outsize = LZ4_compress_HC((const char *) packedsign, (char *) zopbuf,
 					2048, 16384, 16);
@@ -438,8 +441,14 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 	m_stream->Write(&count, &outsize);
 	count = outsize;
 	m_stream->Write(&count, zopbuf);*/
-	count = 2048;
-	m_stream->Write(&count, packedsign);
+		count = 2048;
+		m_stream->Write(&count, packedsign);
+	} else {
+		// Both buffers all zero, encode this as u16 zero
+		int count = sizeof(UINT16);
+		UINT16 outsize = 0;
+		m_stream->Write(&count, &outsize);
+	}
 
 	// store levelLength
 	if (m_levelLength) {
