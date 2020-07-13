@@ -31,6 +31,7 @@
 	#include <stdio.h>
 #endif
 
+#include "fpc/fpc.h"
 #include "fse/fse.h"
 #include "lz4/lz4.h"
 
@@ -549,6 +550,10 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 	//printf("DecodeBuffer: %d\n", filePos);
 #endif
 
+	UINT8 type;
+	count = expected = 1;
+	m_stream->Read(&count, &type);
+
 	// read wordLen
 	count = expected = sizeof(UINT16);
 	m_stream->Read(&count, &wordLen);
@@ -567,9 +572,11 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 		m_stream->Read(&count, tmpbuf);
 		if (count != expected) ReturnWithError(MissingData);
 
-		FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
+		if (type == SC_FSE)
+			FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
+		else
+			FPC_decompress(absbuf, BufferSize, tmpbuf, wordLen);
 
-		UINT8 type;
 		count = expected = 1;
 		m_stream->Read(&count, &type);
 		if (count != expected) ReturnWithError(MissingData);
@@ -590,6 +597,8 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 
 			if (type == SC_FSE) {
 				FSE_decompress(packedsign, 2048, tmpbuf, wordLen);
+			} else if (type == SC_FPC) {
+				FPC_decompress(packedsign, 2048, tmpbuf, wordLen);
 			} else {
 				LZ4_decompress_safe((const char *) tmpbuf,
 							(char *) packedsign,

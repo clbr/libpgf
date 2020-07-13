@@ -31,6 +31,7 @@
 	#include <stdio.h>
 #endif
 
+#include "fpc/fpc.h"
 #include "fse/fse.h"
 #include "lz4/lz4hc.h"
 
@@ -443,23 +444,40 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 
 	if (zerocheck) {
 		size_t outsize = FSE_compress(zopbuf, 32768, absbuf, 16384);
+		const size_t mainfpc = FPC_compress(zopbuf + 16384, absbuf, 16384, 0);
 		if (outsize < 2)
 			abort();
 
-		int count = sizeof(UINT16);
-		m_stream->Write(&count, &outsize);
-		count = outsize;
-		m_stream->Write(&count, zopbuf);
+		SignCompression type = SC_FSE;
+		if (mainfpc < outsize)
+			type = SC_FPC;
+
+		int count = 1;
+		m_stream->Write(&count, &type);
+
+		count = sizeof(UINT16);
+		if (type == SC_FSE) {
+			m_stream->Write(&count, &outsize);
+			count = outsize;
+			m_stream->Write(&count, zopbuf);
+		} else {
+			m_stream->Write(&count, (void *) &mainfpc);
+			count = mainfpc;
+			m_stream->Write(&count, zopbuf + 16384);
+		}
 
 		const size_t lz4len = LZ4_compress_HC((const char *) packedsign,
 							(char *) zopbuf,
 							2048, 16384, 16);
 		const size_t fselen = FSE_compress(zopbuf + 16384, 16384, packedsign, 2048);
+		const size_t fpclen = FPC_compress(zopbuf + 24 * 1024, packedsign, 2048, 0);
 
 		// Sometimes LZ4 beats FSE, sometimes it's incompressible
-		SignCompression type = SC_NONE;
-		if (fselen < lz4len && fselen > 2)
+		type = SC_NONE;
+		if (fselen < lz4len && fselen < fpclen && fselen > 2)
 			type = SC_FSE;
+		else if (fpclen < lz4len && fpclen < 2040 && fpclen > 0)
+			type = SC_FPC;
 		else if (lz4len < 2040)
 			type = SC_LZ4;
 
@@ -476,6 +494,11 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			m_stream->Write(&count, (void *) &fselen);
 			count = fselen;
 			m_stream->Write(&count, zopbuf + 16384);
+		} else if (type == SC_FPC) {
+			count = sizeof(UINT16);
+			m_stream->Write(&count, (void *) &fpclen);
+			count = fpclen;
+			m_stream->Write(&count, zopbuf + 24 * 1024);
 		} else {
 			count = sizeof(UINT16);
 			m_stream->Write(&count, (void *) &lz4len);
@@ -494,8 +517,12 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			}
 		}
 	} else {
+		SignCompression type = SC_NONE;
+		int count = 1;
+		m_stream->Write(&count, &type);
+
 		// Both buffers all zero, encode this as u16 zero
-		int count = sizeof(UINT16);
+		count = sizeof(UINT16);
 		UINT16 outsize = 0;
 		m_stream->Write(&count, &outsize);
 	}
