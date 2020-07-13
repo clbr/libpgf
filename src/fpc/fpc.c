@@ -30,7 +30,7 @@
 #define MAX_BIT_LEN 11
 #define MAX_SYM_NUM 256
 
-#define ADAPTIVE_STEP 2048
+#define ADAPTIVE_STEP 128
 #define BLOCK_OVERHEAD 100 //assume header used for bit lengths is 100 bytes
 
 #define AMAX_BIT_LEN 14
