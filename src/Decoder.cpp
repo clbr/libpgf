@@ -574,6 +574,9 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 		m_stream->Read(&count, &type);
 		if (count != expected) ReturnWithError(MissingData);
 
+		const bool patches = type & SCFLAG_PATCHES;
+		type &= ~SCFLAG_PATCHES;
+
 		if (type == SC_NONE) {
 			count = expected = 2048;
 			m_stream->Read(&count, packedsign);
@@ -598,6 +601,26 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 		for (i = 0; i < BufferSize; i++) {
 			const bool neg = packedsign[i / 8] & (1 << (i % 8));
 			block->m_value[i] = neg ? -absbuf[i] : absbuf[i];
+		}
+
+		if (patches) {
+			UINT8 numpatches;
+			count = expected = 1;
+			m_stream->Read(&count, &numpatches);
+			if (count != expected) ReturnWithError(MissingData);
+
+			UINT16 patchaddr;
+			INT16 patchval;
+			for (i = 0; i < numpatches; i++) {
+				count = expected = 2;
+				m_stream->Read(&count, &patchaddr);
+				if (count != expected) ReturnWithError(MissingData);
+				count = expected = 2;
+				m_stream->Read(&count, &patchval);
+				if (count != expected) ReturnWithError(MissingData);
+
+				block->m_value[patchaddr] = patchval;
+			}
 		}
 	}
 

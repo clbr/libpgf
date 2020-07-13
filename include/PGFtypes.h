@@ -106,6 +106,8 @@ enum SignCompression {
 	SC_LZ4,
 };
 
+enum { SCFLAG_PATCHES = 0x80 };
+
 /// general PGF file structure
 /// PGFPreHeader PGFHeader [PGFPostHeader] LevelLengths Level_n-1 Level_n-2 ... Level_0
 /// PGFPostHeader ::= [ColorTable] [UserData]

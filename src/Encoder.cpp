@@ -415,7 +415,10 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 #endif
 
 	UINT8 absbuf[16384], packedsign[2048], zopbuf[32768];
-	unsigned i, zerocheck = 0;
+	unsigned i, zerocheck = 0, numpatches = 0;
+	#define MAX_PATCH 64
+	UINT16 patchaddr[MAX_PATCH];
+	INT16 patchval[MAX_PATCH];
 
 	memset(packedsign, 0, 2048);
 	for (i = 0; i < 16384; i++) {
@@ -423,6 +426,19 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 		packedsign[i / 8] |= (block->m_value[i] < 0 ? 1 : 0) << (i % 8);
 
 		zerocheck |= absbuf[i] | packedsign[i / 8];
+
+		if (abs(block->m_value[i]) > 255) {
+			/*printf("Need patch %u/%u at %u (%d), max %u\n", numpatches,
+				MAX_PATCH,
+				i, block->m_value[i], m_currentBlock->m_maxAbsValue);*/
+			if (numpatches >= MAX_PATCH)
+				abort();
+
+			patchaddr[numpatches] = i;
+			patchval[numpatches] = block->m_value[i];
+
+			numpatches++;
+		}
 	}
 
 	if (zerocheck) {
@@ -448,7 +464,9 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			type = SC_LZ4;
 
 		count = 1;
-		m_stream->Write(&count, &type);
+		UINT8 typebyte = type;
+		if (numpatches) typebyte |= SCFLAG_PATCHES;
+		m_stream->Write(&count, &typebyte);
 
 		if (type == SC_NONE) {
 			count = 2048;
@@ -463,6 +481,17 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			m_stream->Write(&count, (void *) &lz4len);
 			count = lz4len;
 			m_stream->Write(&count, zopbuf);
+		}
+
+		if (numpatches) {
+			count = 1;
+			m_stream->Write(&count, &numpatches);
+
+			count = 2;
+			for (i = 0; i < numpatches; i++) {
+				m_stream->Write(&count, &patchaddr[i]);
+				m_stream->Write(&count, &patchval[i]);
+			}
 		}
 	} else {
 		// Both buffers all zero, encode this as u16 zero
