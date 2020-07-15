@@ -74,7 +74,7 @@ class CDecoder {
 		void BitplaneDecode();
 
 		ROIBlockHeader m_header;					///< block header
-		DataT  m_value[BufferSize];					///< output buffer of values with index m_valuePos
+		DataT  m_value[BufferSize] __attribute__((aligned(8)));					///< output buffer of values with index m_valuePos
 		UINT32 m_codeBuffer[CodeBufferLen];			///< input buffer for encoded bitstream
 		UINT32 m_valuePos;							///< current position in m_value
 

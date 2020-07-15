@@ -607,20 +607,63 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 		}
 
 		// Unpack
+		const UINT64 xors[16] = {
+			0,
+			0xffff,
+			0xffff0000,
+			0xffffffff,
+			0xffff00000000,
+			0xffff0000ffff,
+			0xffffffff0000,
+			0xffffffffffff,
+			0xffff000000000000,
+			0xffff00000000ffff,
+			0xffff0000ffff0000,
+			0xffff0000ffffffff,
+			0xffffffff00000000,
+			0xffffffff0000ffff,
+			0xffffffffffff0000,
+			0xffffffffffffffff,
+		};
+		const UINT64 adds[16] = {
+			0,
+			0x0001,
+			0x00010000,
+			0x00010001,
+			0x000100000000,
+			0x000100000001,
+			0x000100010000,
+			0x000100010001,
+			0x0001000000000000,
+			0x0001000000000001,
+			0x0001000000010000,
+			0x0001000000010001,
+			0x0001000100000000,
+			0x0001000100000001,
+			0x0001000100010000,
+			0x0001000100010001,
+		};
+
 		for (UINT32 j = 0; j < BufferSize; j += 8) {
 			UINT8 sign = packedsign[j / 8];
 
-			for (i = j; i < j + 8; i++) {
-				const UINT8 neg = sign & 1;
-				//block->m_value[i] = neg ? -absbuf[i] : absbuf[i];
-				UINT16 v = absbuf[i];
-				UINT16 x = neg * 0xffff;
-				v ^= x;
-				v += neg;
-				block->m_value[i] = v;
+			UINT64 v = absbuf[j + 0] |
+					absbuf[j + 1] << 16 |
+					(UINT64) absbuf[j + 2] << 32 |
+					(UINT64) absbuf[j + 3] << 48;
+			v ^= xors[sign % 16];
+			v += adds[sign % 16];
+			*(UINT64 *) &block->m_value[j] = v;
 
-				sign >>= 1;
-			}
+			sign >>= 4;
+
+			v = absbuf[j + 4] |
+					absbuf[j + 5] << 16 |
+					(UINT64) absbuf[j + 6] << 32 |
+					(UINT64) absbuf[j + 7] << 48;
+			v ^= xors[sign];
+			v += adds[sign];
+			*(UINT64 *) &block->m_value[j + 4] = v;
 		}
 
 		if (patches) {
