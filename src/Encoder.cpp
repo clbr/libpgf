@@ -435,6 +435,8 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			if (numpatches >= MAX_PATCH)
 				abort();
 
+			absbuf[i] = 1; // to avoid the -256 "minus zero"
+
 			patchaddr[numpatches] = i;
 			patchval[numpatches] = block->m_value[i];
 
