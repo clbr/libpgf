@@ -609,7 +609,12 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 		// Unpack
 		for (i = 0; i < BufferSize; i++) {
 			const bool neg = packedsign[i / 8] & (1 << (i % 8));
-			block->m_value[i] = neg ? -absbuf[i] : absbuf[i];
+			//block->m_value[i] = neg ? -absbuf[i] : absbuf[i];
+			UINT16 v = absbuf[i];
+			UINT16 x = neg * 0xffff;
+			v ^= x;
+			v += neg;
+			block->m_value[i] = v;
 		}
 
 		if (patches) {
