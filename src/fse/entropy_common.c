@@ -1,36 +1,16 @@
-/*
-   Common functions for Finite State Entropy project
-   Copyright (C) 2016-present, Yann Collet.
-
-   BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
-
-   Redistribution and use in source and binary forms, with or without
-   modification, are permitted provided that the following conditions are
-   met:
-
-       * Redistributions of source code must retain the above copyright
-   notice, this list of conditions and the following disclaimer.
-       * Redistributions in binary form must reproduce the above
-   copyright notice, this list of conditions and the following disclaimer
-   in the documentation and/or other materials provided with the
-   distribution.
-
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-    You can contact the author at :
-    - FSE+HUF source repository : https://github.com/Cyan4973/FiniteStateEntropy
-    - Public forum : https://groups.google.com/forum/#!forum/lz4c
-*************************************************************************** */
+/* ******************************************************************
+ * Common functions of New Generation Entropy library
+ * Copyright (c) 2016-2020, Yann Collet, Facebook, Inc.
+ *
+ *  You can contact the author at :
+ *  - FSE+HUF source repository : https://github.com/Cyan4973/FiniteStateEntropy
+ *  - Public forum : https://groups.google.com/forum/#!forum/lz4c
+ *
+ * This source code is licensed under both the BSD-style license (found in the
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found
+ * in the COPYING file in the root directory of this source tree).
+ * You may select, at your option, one of the above-listed licenses.
+****************************************************************** */
 
 /* *************************************
 *  Dependencies
@@ -54,8 +34,9 @@ const char* FSE_getErrorName(size_t code) { return ERR_getErrorName(code); }
 unsigned HUF_isError(size_t code) { return ERR_isError(code); }
 const char* HUF_getErrorName(size_t code) { return ERR_getErrorName(code); }
 
+
 /*-**************************************************************
-*  FSE NCount decoding
+*  FSE NCount encoding-decoding
 ****************************************************************/
 size_t FSE_readNCount (short* normalizedCounter, unsigned* maxSVPtr, unsigned* tableLogPtr,
                  const void* headerBuffer, size_t hbSize)
@@ -71,8 +52,6 @@ size_t FSE_readNCount (short* normalizedCounter, unsigned* maxSVPtr, unsigned* t
     unsigned charnum = 0;
     int previous0 = 0;
 
-    DEBUGLOG(5, "FSE_readNCount");
-
     if (hbSize < 4) {
         /* This function only works when hbSize >= 4 */
         char buffer[4];
@@ -86,6 +65,8 @@ size_t FSE_readNCount (short* normalizedCounter, unsigned* maxSVPtr, unsigned* t
     }   }
     assert(hbSize >= 4);
 
+    /* init */
+    memset(normalizedCounter, 0, (*maxSVPtr+1) * sizeof(normalizedCounter[0]));   /* all symbols not present in NCount have a frequency of 0 */
     bitStream = MEM_readLE32(ip);
     nbBits = (bitStream & 0xF) + FSE_MIN_TABLELOG;   /* extract tableLog */
     if (nbBits > FSE_TABLELOG_ABSOLUTE_MAX) return ERROR(tableLog_tooLarge);
@@ -157,11 +138,6 @@ size_t FSE_readNCount (short* normalizedCounter, unsigned* maxSVPtr, unsigned* t
     }   }   /* while ((remaining>1) & (charnum<=*maxSVPtr)) */
     if (remaining != 1) return ERROR(corruption_detected);
     if (bitCount > 32) return ERROR(corruption_detected);
-    /* zeroise the rest */
-    {   unsigned symbNb = charnum;
-        for (symbNb=charnum; symbNb <= *maxSVPtr; symbNb++)
-            normalizedCounter[symbNb] = 0;
-    }
     *maxSVPtr = charnum-1;
 
     ip += (bitCount+7)>>3;
