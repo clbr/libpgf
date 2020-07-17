@@ -154,7 +154,9 @@ public:
 	/// @param band A subband
 	/// @param bandPos A valid position in subband band
 	/// @param quantParam The quantization parameter
-	void DequantizeValue(CSubband* band, UINT32 bandPos, int quantParam);
+	void DequantizeValue(CSubband* band, UINT32 bandPos, const UINT8 quantParam);
+
+	void DequantizeValue8(CSubband* band, UINT32 bandPos, const UINT8 quantParam);
 
 	//////////////////////////////////////////////////////////////////////
 	/// Copies data from the open stream to a target buffer.

@@ -272,7 +272,6 @@ void CDecoder::Partition(CSubband* band, int quantParam, int width, int height, 
 
 	const div_t ww = div(width, LinBlockSize);
 	const div_t hh = div(height, LinBlockSize);
-	const int ws = pitch - LinBlockSize;
 	const int wr = pitch - ww.rem;
 	int pos, base = startPos, base2;
 
@@ -283,11 +282,8 @@ void CDecoder::Partition(CSubband* band, int quantParam, int width, int height, 
 		for (int j=0; j < ww.quot; j++) {
 			pos = base2;
 			for (int y=0; y < LinBlockSize; y++) {
-				for (int x=0; x < LinBlockSize; x++) {
-					DequantizeValue(band, pos, quantParam);
-					pos++;
-				}
-				pos += ws;
+				DequantizeValue8(band, pos, quantParam);
+				pos += pitch;
 			}
 			base2 += LinBlockSize;
 		}
@@ -308,11 +304,8 @@ void CDecoder::Partition(CSubband* band, int quantParam, int width, int height, 
 		// rest of height
 		pos = base2;
 		for (int y=0; y < hh.rem; y++) {
-			for (int x=0; x < LinBlockSize; x++) {
-				DequantizeValue(band, pos, quantParam);
-				pos++;
-			}
-			pos += ws;
+			DequantizeValue8(band, pos, quantParam);
+			pos += pitch;
 		}
 		base2 += LinBlockSize;
 	}
@@ -463,7 +456,7 @@ void CDecoder::Skip(UINT64 offset) {
 /// @param band A subband
 /// @param bandPos A valid position in subband band
 /// @param quantParam The quantization parameter
-void CDecoder::DequantizeValue(CSubband* band, UINT32 bandPos, int quantParam) {
+void CDecoder::DequantizeValue(CSubband* band, UINT32 bandPos, const UINT8 quantParam) {
 	ASSERT(m_currentBlock);
 
 	if (m_currentBlock->IsCompletelyRead()) {
@@ -473,6 +466,43 @@ void CDecoder::DequantizeValue(CSubband* band, UINT32 bandPos, int quantParam) {
 
 	band->SetData(bandPos, m_currentBlock->m_value[m_currentBlock->m_valuePos] << quantParam);
 	m_currentBlock->m_valuePos++;
+}
+
+void CDecoder::DequantizeValue8(CSubband* band, UINT32 bandPos, const UINT8 quantParam) {
+	ASSERT(m_currentBlock);
+
+	if (bandPos % 8 ||
+		m_currentBlock->m_valuePos % 8 ||
+		m_currentBlock->m_valuePos + 8 > m_currentBlock->m_header.rbh.bufferSize) {
+
+		for (UINT32 i = 0; i < 8; i++)
+			CDecoder::DequantizeValue(band, bandPos + i, quantParam);
+		return;
+	}
+
+	UINT64 v;
+	const UINT64 ands[8] = {
+		0xffffffffffffffff,
+		0x7fff7fff7fff7fff,
+		0x3fff3fff3fff3fff,
+		0x1fff1fff1fff1fff,
+		0x0fff0fff0fff0fff,
+		0x07ff07ff07ff07ff,
+		0x03ff03ff03ff03ff,
+		0x01ff01ff01ff01ff,
+	};
+
+	v = *(UINT64 *) &m_currentBlock->m_value[m_currentBlock->m_valuePos];
+	v &= ands[quantParam];
+	v <<= quantParam;
+	*(UINT64 *) &band->GetBuffer()[bandPos] = v;
+
+	v = *(UINT64 *) &m_currentBlock->m_value[m_currentBlock->m_valuePos + 4];
+	v &= ands[quantParam];
+	v <<= quantParam;
+	*(UINT64 *) &band->GetBuffer()[bandPos + 4] = v;
+
+	m_currentBlock->m_valuePos += 8;
 }
 
 //////////////////////////////////////////////////////////////////////
