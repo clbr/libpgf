@@ -1014,7 +1014,7 @@ size_t comp_adaptive(void * output,void * input,size_t inlen)
 
 	int Cfreq[ADAPT_MOD][256];
 	int dp[ADAPT_MOD];
-	U8 *block_size = (U8 *) malloc((inlen/STEP)+1);
+	U8 *block_size = (U8 *) calloc((inlen/STEP)+1, 1);
 	U8 *in = (U8 *)input,*out = (U8 *)output,*out_start = (U8 *) output;
 
 	CHECK(block_size == 0)
