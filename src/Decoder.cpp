@@ -62,6 +62,11 @@
 #define CodeBufferBitLen		(CodeBufferLen*WordWidth)	///< max number of bits in m_codeBuffer
 #define MaxCodeLen				((1 << RLblockSizeLen) - 1)	///< max length of RL encoded block
 
+union ptrunion {
+	UINT64 *p64;
+	DataT *d;
+};
+
 /////////////////////////////////////////////////////////////////////
 /// Constructor
 /// Read pre-header, header, and levelLength
@@ -492,15 +497,20 @@ void CDecoder::DequantizeValue8(CSubband* band, UINT32 bandPos, const UINT8 quan
 		0x01ff01ff01ff01ff,
 	};
 
-	v = *(UINT64 *) &m_currentBlock->m_value[m_currentBlock->m_valuePos];
+	ptrunion u;
+	u.d = &m_currentBlock->m_value[m_currentBlock->m_valuePos];
+	v = *u.p64;
 	v &= ands[quantParam];
 	v <<= quantParam;
-	*(UINT64 *) &band->GetBuffer()[bandPos] = v;
+	u.d = &band->GetBuffer()[bandPos];
+	*u.p64 = v;
 
-	v = *(UINT64 *) &m_currentBlock->m_value[m_currentBlock->m_valuePos + 4];
+	u.d = &m_currentBlock->m_value[m_currentBlock->m_valuePos + 4];
+	v = *u.p64;
 	v &= ands[quantParam];
 	v <<= quantParam;
-	*(UINT64 *) &band->GetBuffer()[bandPos + 4] = v;
+	u.d = &band->GetBuffer()[bandPos + 4];
+	*u.p64 = v;
 
 	m_currentBlock->m_valuePos += 8;
 }
@@ -674,6 +684,7 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 			0x0001000100010001,
 		};
 
+		ptrunion u;
 		for (UINT32 j = 0; j < BufferSize; j += 8) {
 			UINT8 sign = packedsign[j / 8];
 
@@ -683,7 +694,8 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 					(UINT64) absbuf[j + 3] << 48;
 			v ^= xors[sign % 16];
 			v += adds[sign % 16];
-			*(UINT64 *) &block->m_value[j] = v;
+			u.d = &block->m_value[j];
+			*u.p64 = v;
 
 			sign >>= 4;
 
@@ -693,7 +705,8 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 					(UINT64) absbuf[j + 7] << 48;
 			v ^= xors[sign];
 			v += adds[sign];
-			*(UINT64 *) &block->m_value[j + 4] = v;
+			u.d = &block->m_value[j + 4];
+			*u.p64 = v;
 		}
 
 		if (patches) {
