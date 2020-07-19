@@ -34,6 +34,7 @@
 #include "fpc/fpc.h"
 #include "fse/fse.h"
 #include "lz4/lz4hc.h"
+#include "srle/sparserle.h"
 
 //////////////////////////////////////////////////////
 // PGF: file structure
@@ -415,7 +416,7 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 	//printf("EncodeBuffer: %d\n", filePos);
 #endif
 
-	UINT8 absbuf[16384], packedsign[2048], zopbuf[32768];
+	UINT8 absbuf[16384], packedsign[2048], zopbuf[32768], rlebuf[16384], rlebitbuf[16384];
 	unsigned i, zerocheck = 0, numpatches = 0;
 	#define MAX_PATCH 64
 	UINT16 patchaddr[MAX_PATCH];
@@ -445,26 +446,42 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 	}
 
 	if (zerocheck) {
+		size_t best;
 		size_t outsize = FSE_compress(zopbuf, 32768, absbuf, 16384);
 		const size_t mainfpc = FPC_compress(zopbuf + 16384, absbuf, 16384, 0);
+		uint16_t rlesize = sparserle_comp(absbuf, rlebuf, 16384);
+		uint16_t rlebitsize = sparsebitrle_comp(absbuf, rlebitbuf, 16384);
 		if (outsize < 2)
 			abort();
 
+		best = outsize;
 		SignCompression type = SC_FSE;
-		if (mainfpc < outsize)
+		if (mainfpc < best) {
 			type = SC_FPC;
+			best = mainfpc;
+		}
+		if (rlebitsize < best + 16) {
+			type = SC_SRLE_BIT;
+			best = rlebitsize;
+		}
+		if (rlesize < best + 16) {
+			type = SC_SRLE;
+			best = rlesize;
+		}
 
 		int count = 1;
 		m_stream->Write(&count, &type);
 
 		count = sizeof(UINT16);
+		m_stream->Write(&count, &best);
+		count = best;
 		if (type == SC_FSE) {
-			m_stream->Write(&count, &outsize);
-			count = outsize;
 			m_stream->Write(&count, zopbuf);
+		} else if (type == SC_SRLE) {
+			m_stream->Write(&count, rlebuf);
+		} else if (type == SC_SRLE_BIT) {
+			m_stream->Write(&count, rlebitbuf);
 		} else {
-			m_stream->Write(&count, (void *) &mainfpc);
-			count = mainfpc;
 			m_stream->Write(&count, zopbuf + 16384);
 		}
 

@@ -105,6 +105,8 @@ enum SignCompression {
 	SC_FSE,
 	SC_LZ4,
 	SC_FPC,
+	SC_SRLE,
+	SC_SRLE_BIT,
 };
 
 enum { SCFLAG_PATCHES = 0x80 };

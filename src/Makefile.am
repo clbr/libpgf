@@ -19,6 +19,9 @@ libpgf_la_SOURCES = \
 	\
 	fpc/fpc.c \
 	\
+	srle/sparserle.c \
+	srle/sparsebitrle.c \
+	\
 	lz4/lz4.c \
 	lz4/lz4hc.c
 

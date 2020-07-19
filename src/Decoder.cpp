@@ -34,6 +34,7 @@
 #include "fpc/fpc.h"
 #include "fse/fse.h"
 #include "lz4/lz4.h"
+#include "srle/sparserle.h"
 
 //////////////////////////////////////////////////////
 // PGF: file structure
@@ -614,6 +615,10 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 
 		if (type == SC_FSE)
 			FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
+		else if (type == SC_SRLE)
+			sparserle_decomp(tmpbuf, absbuf, wordLen);
+		else if (type == SC_SRLE_BIT)
+			sparsebitrle_decomp(tmpbuf, absbuf, 16384);
 		else
 			FPC_decompress(absbuf, BufferSize, tmpbuf, wordLen);
 
