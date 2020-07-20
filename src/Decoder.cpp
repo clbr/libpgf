@@ -644,6 +644,10 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 				FSE_decompress(packedsign, 2048, tmpbuf, wordLen);
 			} else if (type == SC_FPC) {
 				FPC_decompress(packedsign, 2048, tmpbuf, wordLen);
+			} else if (type == SC_SRLE) {
+				sparserle_decomp(tmpbuf, packedsign, wordLen);
+			} else if (type == SC_SRLE_BIT) {
+				sparsebitrle_decomp(tmpbuf, packedsign, 2048);
 			} else {
 				LZ4_decompress_safe((const char *) tmpbuf,
 							(char *) packedsign,

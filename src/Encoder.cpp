@@ -490,15 +490,33 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 							2048, 16384, 16);
 		const size_t fselen = FSE_compress(zopbuf + 16384, 16384, packedsign, 2048);
 		const size_t fpclen = FPC_compress(zopbuf + 24 * 1024, packedsign, 2048, 0);
+		rlesize = sparserle_comp(packedsign, rlebuf, 2048);
+		rlebitsize = sparsebitrle_comp(packedsign, rlebitbuf, 2048);
 
 		// Sometimes LZ4 beats FSE, sometimes it's incompressible
 		type = SC_NONE;
-		if (fselen < lz4len && fselen < fpclen && fselen > 2)
+		best = 2028; // 2048 minus overhead heuristic
+
+		if (fselen > 2 && fselen < best) {
 			type = SC_FSE;
-		else if (fpclen < lz4len && fpclen < 2040 && fpclen > 0)
+			best = fselen;
+		}
+		if (fpclen < best) {
 			type = SC_FPC;
-		else if (lz4len < 2040)
+			best = fpclen;
+		}
+		if (lz4len <= best) {
 			type = SC_LZ4;
+			best = lz4len;
+		}
+		if (rlebitsize < best + 16) {
+			type = SC_SRLE_BIT;
+			best = rlebitsize;
+		}
+		if (rlesize < best + 16) {
+			type = SC_SRLE;
+			best = rlesize;
+		}
 
 		count = 1;
 		UINT8 typebyte = type;
@@ -508,21 +526,22 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 		if (type == SC_NONE) {
 			count = 2048;
 			m_stream->Write(&count, packedsign);
-		} else if (type == SC_FSE) {
-			count = sizeof(UINT16);
-			m_stream->Write(&count, (void *) &fselen);
-			count = fselen;
-			m_stream->Write(&count, zopbuf + 16384);
-		} else if (type == SC_FPC) {
-			count = sizeof(UINT16);
-			m_stream->Write(&count, (void *) &fpclen);
-			count = fpclen;
-			m_stream->Write(&count, zopbuf + 24 * 1024);
 		} else {
 			count = sizeof(UINT16);
-			m_stream->Write(&count, (void *) &lz4len);
-			count = lz4len;
-			m_stream->Write(&count, zopbuf);
+			m_stream->Write(&count, &best);
+			count = best;
+
+			if (type == SC_FSE) {
+				m_stream->Write(&count, zopbuf + 16384);
+			} else if (type == SC_FPC) {
+				m_stream->Write(&count, zopbuf + 24 * 1024);
+			} else if (type == SC_SRLE) {
+				m_stream->Write(&count, rlebuf);
+			} else if (type == SC_SRLE_BIT) {
+				m_stream->Write(&count, rlebitbuf);
+			} else {
+				m_stream->Write(&count, zopbuf);
+			}
 		}
 
 		if (numpatches) {
