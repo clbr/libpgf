@@ -9,6 +9,9 @@
 
 //#include <stdio.h>
 
+// measured on the test data set, no wins vs fse over this used number
+#define MAXUSED 100
+
 void huffman(const u32 totalprob[256], const u32 len, u8 canonical[256]);
 void canoncode(const u8 n, const u8 canon[256], u32 *val, u32 *bits);
 
@@ -248,12 +251,12 @@ uint16_t zeropack_comp_rec(const uint8_t *in, uint8_t *out, const uint16_t len) 
 			largest = i;
 		}
 	}
-	if (!usedvals)
+	if (!usedvals || usedvals > MAXUSED)
 		return USHRT_MAX;
 
 	qsort(nodes, usedvals, sizeof(struct node_t), nodecmp);
 
-	u32 tprob[256];
+	u32 tprob[MAXUSED];
 	for (i = 0; i < usedvals; i++)
 		tprob[i] = nodes[i].count;
 
@@ -314,6 +317,7 @@ uint16_t zeropack_comp_rec(const uint8_t *in, uint8_t *out, const uint16_t len) 
 	return out - start;
 }
 
+/*
 static uint16_t ipow(uint16_t base, uint16_t exp) {
 	uint16_t out = 1;
 
@@ -325,87 +329,133 @@ static uint16_t ipow(uint16_t base, uint16_t exp) {
 	}
 
 	return out;
-}
+}*/
 
-static u8 huffbytes[256];
+static u8 huffbytes[MAXUSED];
 static u16 huffstate;
 static u8 hsbits;
 static u8 hsused;
-static u16 hsand[256];
-static u8 hslen[256];
+static u16 hsand[MAXUSED];
+static u8 hslen[MAXUSED];
 
-static uint16_t inner_rec(const uint8_t val, uint8_t *out,
-				const uint8_t *bytepos[],
-				const uint16_t canoncodes[],
-				const uint8_t level) {
+// partial accel table
+static u8 habyte[16];
+static u8 habits[16];
+static u8 hastart;
 
-	const uint16_t num = ipow(8, level);
-	uint8_t i;
+static const uint16_t pow8[MAXLEVELS] = { 1, 8, 64, 512 };
+static uint16_t canoncodes[MAXUSED] = { 0 };
+static const uint8_t *bytepos[MAXLEVELS];
 
-	// Fast path: all zero
-	if (!val) {
-		memset(out, 0, num * 8);
-		return num * 8;
+#define REC(level, levelminus) \
+static uint16_t inner_rec ## level(const uint8_t val, uint8_t *out) { \
+\
+	const uint16_t num = pow8[level]; \
+	uint8_t i; \
+\
+	uint16_t wrote = 0; \
+	for (i = 0; i < 8; i++) { \
+		if (val & (1 << i)) { \
+			const uint16_t got = inner_rec ## levelminus(*bytepos[level]++, \
+							out); \
+			if (got != num) { \
+				/*printf("err, wrote %u expected %u\n", got, num);*/ \
+				abort(); \
+			} \
+			out += num; \
+			wrote += num; \
+		} else { \
+			memset(out, 0, num); \
+			out += num; \
+			wrote += num; \
+		} \
+	} \
+\
+	return wrote; \
+}
+
+static uint8_t gethuff() {
+	uint8_t out = 0;
+
+	// Read bits until we have a huff match
+	if (!hsbits) {
+		huffstate = bit_read(8);
+		huffstate |= bit_read(8) << 8;
+		hsbits = 16;
+	} else if (hsbits < 4) {
+		huffstate |= bit_read(4) << hsbits;
+		hsbits += 4;
 	}
 
-	uint16_t wrote = 0;
+	u8 h;
+
+	h = huffstate & 0xf;
+	if (habits[h]) {
+		hsbits -= habits[h];
+		huffstate >>= habits[h];
+		return habyte[h];
+	}
+
+	for (h = hastart; h < hsused; h++) {
+		while (hslen[h] > hsbits) {
+			if (hsbits <= 8) {
+				huffstate |= bit_read(8) << hsbits;
+				hsbits += 8;
+			} else if (hsbits <= 12) {
+				huffstate |= bit_read(4) << hsbits;
+				hsbits += 4;
+			} else {
+				huffstate |= bit_read(1) << hsbits;
+				hsbits++;
+			}
+		}
+		if ((huffstate & hsand[h]) == canoncodes[h]) {
+			out = huffbytes[h];
+			hsbits -= hslen[h];
+			huffstate >>= hslen[h];
+			break;
+		}
+	}
+	if (h == hsused) {
+//		printf("err, not found\n");
+		abort();
+	}
+
+	return out;
+}
+
+static uint16_t inner_rec0(const uint8_t val, uint8_t *out) {
+
+	uint8_t i;
+	uint64_t v = 0;
+
 	for (i = 0; i < 8; i++) {
 		if (val & (1 << i)) {
-			if (!level) {
-				// Read bits until we have a huff match
-				if (!hsbits) {
-					huffstate = bit_read(8);
-					huffstate |= bit_read(8) << 8;
-					hsbits = 16;
-				}
-				u8 h;
-				for (h = 0; h < hsused; h++) {
-					while (hslen[h] > hsbits) {
-						if (hsbits <= 8) {
-							huffstate |= bit_read(8) << hsbits;
-							hsbits += 8;
-						} else if (hsbits <= 12) {
-							huffstate |= bit_read(4) << hsbits;
-							hsbits += 4;
-						} else {
-							huffstate |= bit_read(1) << hsbits;
-							hsbits++;
-						}
-					}
-
-					if ((huffstate & hsand[h]) == canoncodes[h]) {
-						*out++ = huffbytes[h];
-						hsbits -= hslen[h];
-						huffstate >>= hslen[h];
-						break;
-					}
-					if (h == hsused - 1) {
-//						printf("err, not found\n");
-						abort();
-					}
-				}
-				wrote++;
-			} else {
-				const uint16_t got = inner_rec(*bytepos[level]++,
-								out, bytepos,
-								canoncodes,
-								level - 1);
-				if (got != num) {
-//					printf("err, wrote %u expected %u\n", got, num);
-					abort();
-				}
-				out += num;
-				wrote += num;
-			}
-		} else {
-			memset(out, 0, num);
-			out += num;
-			wrote += num;
+			v |= (uint64_t) gethuff() << i * 8;
 		}
 	}
 
-	return wrote;
+	union pt {
+		uint8_t *u8;
+		uint64_t *u64;
+	} u;
+
+	u.u8 = out;
+	*u.u64 = v;
+
+	return 8;
 }
+
+REC(1, 0)
+REC(2, 1)
+REC(3, 2)
+
+static uint16_t (* const inner_recs[MAXLEVELS])(const uint8_t val, uint8_t *out) = {
+	inner_rec0,
+	inner_rec1,
+	inner_rec2,
+	inner_rec3,
+};
 
 void zeropack_decomp_rec(const uint8_t *in, uint8_t *out, const uint16_t outlen) {
 	const uint8_t level = *in++;
@@ -413,7 +463,6 @@ void zeropack_decomp_rec(const uint8_t *in, uint8_t *out, const uint16_t outlen)
 	int8_t k;
 
 	uint16_t bytes[MAXLEVELS], bitsizes[MAXLEVELS], i;
-	const uint8_t *bytepos[MAXLEVELS];
 	bitsizes[0] = outlen / 8;
 	for (i = 1; i <= level; i++) {
 		bitsizes[i] = bitsizes[i - 1] / 8;
@@ -450,7 +499,6 @@ void zeropack_decomp_rec(const uint8_t *in, uint8_t *out, const uint16_t outlen)
 	for (i = 1; i <= longestbit; i++)
 		canonlen[i] = bit_read(4);
 
-	uint16_t canoncodes[256] = { 0 };
 	for (i = 0; i < usedvals; i++) {
 		u32 val, bits;
 		canoncode(i, canonlen, &val, &bits);
@@ -463,11 +511,33 @@ void zeropack_decomp_rec(const uint8_t *in, uint8_t *out, const uint16_t outlen)
 //			hslen[i], hsand[i]);
 	}
 
+	memset(habits, 0, 16);
+	for (i = 0; i < 16; i++) {
+		uint8_t h;
+		for (h = 0; h < hsused; h++) {
+			if (hslen[h] > 4) {
+				hastart = h;
+				break;
+			}
+			if ((i & hsand[h]) == canoncodes[h]) {
+				habyte[i] = huffbytes[h];
+				habits[i] = hslen[h];
+				break;
+			}
+		}
+	}
+
 	huffstate = hsbits = 0;
 
 	// Recursively unpack, straight to dest
+	const uint16_t num = pow8[level] * 8;
 	for (i = 0; i < bitsizes[level]; i++) {
-		out += inner_rec(in[i], out, bytepos, canoncodes, level);
+		if (!in[i]) {
+			memset(out, 0, num);
+			out += num;
+		} else {
+			out += inner_recs[level](in[i], out);
+		}
 	}
 
 	if (out != outstart + outlen) {

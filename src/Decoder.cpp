@@ -584,7 +584,7 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 	UINT16 wordLen;
 	ROIBlockHeader h(BufferSize);
 	int count, expected;
-	UINT8 absbuf[BufferSize], tmpbuf[BufferSize], packedsign[2048];
+	UINT8 absbuf[BufferSize] __attribute__((aligned(8))), tmpbuf[BufferSize], packedsign[2048];
 	UINT32 i;
 
 #ifdef TRACE
