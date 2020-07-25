@@ -339,8 +339,8 @@ static u16 hsand[MAXUSED];
 static u8 hslen[MAXUSED];
 
 // partial accel table
-static u8 habyte[16];
-static u8 habits[16];
+static u8 habyte[32];
+static u8 habits[32];
 static u8 hastart;
 
 static const uint16_t pow8[MAXLEVELS] = { 1, 8, 64, 512 };
@@ -382,14 +382,14 @@ static uint8_t gethuff() {
 		huffstate = bit_read(8);
 		huffstate |= bit_read(8) << 8;
 		hsbits = 16;
-	} else if (hsbits < 4) {
-		huffstate |= bit_read(4) << hsbits;
-		hsbits += 4;
+	} else if (hsbits < 8) {
+		huffstate |= bit_read(8) << hsbits;
+		hsbits += 8;
 	}
 
 	u8 h;
 
-	h = huffstate & 0xf;
+	h = huffstate & 0x1f;
 	if (habits[h]) {
 		hsbits -= habits[h];
 		huffstate >>= habits[h];
@@ -426,15 +426,108 @@ static uint8_t gethuff() {
 
 static uint16_t inner_rec0(const uint8_t val, uint8_t *out) {
 
-	uint8_t i;
 	uint64_t v = 0;
 
-	for (i = 0; i < 8; i++) {
-		if (val & (1 << i)) {
-			v |= (uint64_t) gethuff() << i * 8;
-		}
-	}
+	static const void * const jmp[16] = {
+		&&low0,
+		&&low1,
+		&&low2,
+		&&low3,
+		&&low4,
+		&&low5,
+		&&low6,
+		&&low7,
+		&&low8,
+		&&low9,
+		&&low10,
+		&&low11,
+		&&low12,
+		&&low13,
+		&&low14,
+		&&low15,
+	};
+	static const void * const jmp2[16] = {
+		&&hi0,
+		&&hi1,
+		&&hi2,
+		&&hi3,
+		&&hi4,
+		&&hi5,
+		&&hi6,
+		&&hi7,
+		&&hi8,
+		&&hi9,
+		&&hi10,
+		&&hi11,
+		&&hi12,
+		&&hi13,
+		&&hi14,
+		&&hi15,
+	};
 
+	goto *jmp[val & 0xf];
+
+#define LOW(b) \
+	if (b & (1 << 0)) v |= (uint64_t) gethuff() << 0 * 8; \
+	if (b & (1 << 1)) v |= (uint64_t) gethuff() << 1 * 8; \
+	if (b & (1 << 2)) v |= (uint64_t) gethuff() << 2 * 8; \
+	if (b & (1 << 3)) v |= (uint64_t) gethuff() << 3 * 8;
+
+#define ENTRY(e) low ## e: LOW(e) goto next;
+
+	ENTRY(0)
+	ENTRY(1)
+	ENTRY(2)
+	ENTRY(3)
+	ENTRY(4)
+	ENTRY(5)
+	ENTRY(6)
+	ENTRY(7)
+	ENTRY(8)
+	ENTRY(9)
+	ENTRY(10)
+	ENTRY(11)
+	ENTRY(12)
+	ENTRY(13)
+	ENTRY(14)
+	ENTRY(15)
+
+#undef ENTRY
+#undef LOW
+
+next:
+	goto *jmp2[val >> 4];
+
+#define HI(b) \
+	if (b & (1 << 0)) v |= (uint64_t) gethuff() << 4 * 8; \
+	if (b & (1 << 1)) v |= (uint64_t) gethuff() << 5 * 8; \
+	if (b & (1 << 2)) v |= (uint64_t) gethuff() << 6 * 8; \
+	if (b & (1 << 3)) v |= (uint64_t) gethuff() << 7 * 8;
+
+#define ENTRY(e) hi ## e: HI(e) goto out;
+
+	ENTRY(0)
+	ENTRY(1)
+	ENTRY(2)
+	ENTRY(3)
+	ENTRY(4)
+	ENTRY(5)
+	ENTRY(6)
+	ENTRY(7)
+	ENTRY(8)
+	ENTRY(9)
+	ENTRY(10)
+	ENTRY(11)
+	ENTRY(12)
+	ENTRY(13)
+	ENTRY(14)
+	ENTRY(15)
+
+#undef ENTRY
+#undef HI
+
+out:
+	;
 	union pt {
 		uint8_t *u8;
 		uint64_t *u64;
@@ -457,6 +550,17 @@ static uint16_t (* const inner_recs[MAXLEVELS])(const uint8_t val, uint8_t *out)
 	inner_rec3,
 };
 
+static uint8_t popcount8(uint8_t in) {
+	static const uint8_t bits16[16] = {
+		0, 1, 1, 2,
+		1, 2, 2, 3,
+		1, 2, 2, 3,
+		2, 3, 3, 4
+	};
+
+	return bits16[in & 0xf] + bits16[in >> 4];
+}
+
 void zeropack_decomp_rec(const uint8_t *in, uint8_t *out, const uint16_t outlen) {
 	const uint8_t level = *in++;
 	const uint8_t * const outstart = out;
@@ -472,7 +576,7 @@ void zeropack_decomp_rec(const uint8_t *in, uint8_t *out, const uint16_t outlen)
 	const uint8_t *ptr = in;
 	bytes[level] = 0;
 	for (i = 0; i < bitsizes[level]; i++) {
-		bytes[level] += __builtin_popcount(ptr[i]);
+		bytes[level] += popcount8(ptr[i]);
 	}
 	ptr += bitsizes[level];
 	bytepos[level] = ptr;
@@ -480,7 +584,7 @@ void zeropack_decomp_rec(const uint8_t *in, uint8_t *out, const uint16_t outlen)
 	for (k = level - 1; k > 0; k--) {
 		bytes[k] = 0;
 		for (i = 0; i < bytes[k + 1]; i++) {
-			bytes[k] += __builtin_popcount(*ptr++);
+			bytes[k] += popcount8(*ptr++);
 		}
 		bytepos[k] = ptr;
 	}
@@ -511,11 +615,12 @@ void zeropack_decomp_rec(const uint8_t *in, uint8_t *out, const uint16_t outlen)
 //			hslen[i], hsand[i]);
 	}
 
-	memset(habits, 0, 16);
-	for (i = 0; i < 16; i++) {
+	memset(habits, 0, 32);
+	hastart = 0;
+	for (i = 0; i < 32; i++) {
 		uint8_t h;
 		for (h = 0; h < hsused; h++) {
-			if (hslen[h] > 4) {
+			if (hslen[h] > 5) {
 				hastart = h;
 				break;
 			}

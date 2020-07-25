@@ -463,10 +463,10 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			type = SC_FPC;
 			best = mainfpc;
 		}
-		/*if (zprsize < best) {
+		if (zprsize < best) {
 			type = SC_ZP;
 			best = zprsize;
-		}*/
+		}
 		if (rlebitsize < best + 16) {
 			type = SC_SRLE_BIT;
 			best = rlebitsize;
