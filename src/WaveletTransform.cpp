@@ -229,6 +229,8 @@ void CWaveletTransform::InterleavedToSubbands(int destLevel, DataT* loRow, DataT
 	}
 }
 
+typedef int16_t vec_s16 __attribute__ ((vector_size (16)));
+
 //////////////////////////////////////////////////////////////////////////
 // Compute fast inverse wavelet transform of all 4 subbands of given level and
 // stores result in LL subband of level - 1.
@@ -354,7 +356,41 @@ OSError CWaveletTransform::InverseTransform(int srcLevel, UINT32* w, UINT32* h, 
 		row2 = row1 + destWidth; row3 = row2 + destWidth;
 		for (UINT32 i = destROI.top + 2; i < destROI.bottom - 1; i += 2) {
 			SubbandsToInterleaved(srcLevel, row2, row3, width);
-			for (UINT32 k = 0; k < width; k++) {
+
+			UINT32 k = 0;
+			if ((((uint64_t) row0) & 15) == 0 &&
+				(((uint64_t) row1) & 15) == 0 &&
+				(((uint64_t) row2) & 15) == 0 &&
+				(((uint64_t) row3) & 15) == 0) {
+
+				const vec_s16 vc1 = (vec_s16) {
+					c1, c1, c1, c1,
+					c1, c1, c1, c1
+				};
+				const vec_s16 vc2 = (vec_s16) {
+					c2, c2, c2, c2,
+					c2, c2, c2, c2
+				};
+
+				for (; k < width - 7; k += 8) {
+					vec_s16 r0 = *(vec_s16 *) &row0[k];
+					vec_s16 r1 = *(vec_s16 *) &row1[k];
+					vec_s16 r2 = *(vec_s16 *) &row2[k];
+					vec_s16 r3 = *(vec_s16 *) &row3[k];
+
+					r3 += vc2 + r1;
+					r3 = __builtin_ia32_psrawi128(r3, 2); // >>=2
+					r2 -= r3;
+					*(vec_s16 *) &row2[k] = r2;
+
+					r2 += vc1 + r0;
+					r2 = __builtin_ia32_psrawi128(r2, 1); // >>=1
+					r1 += r2;
+					*(vec_s16 *) &row1[k] = r1;
+				}
+			}
+
+			for (; k < width; k++) {
 				row2[k] -= ((row1[k] + row3[k] + c2) >> 2); // even
 				row1[k] += ((row0[k] + row2[k] + c1) >> 1); // odd
 			}
