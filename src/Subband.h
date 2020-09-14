@@ -149,14 +149,28 @@ private:
 	DataT ReadBuffer()					{ ASSERT(m_dataPos < m_size); return m_data[m_dataPos++]; }
 
 	UINT64 ReadDouble0() {
-		UINT64 v = *(UINT32 *) &m_data[m_dataPos];
+		union ptrunion {
+			UINT32 *p32;
+			DataT *d;
+		};
+		ptrunion u;
+		u.d = &m_data[m_dataPos];
+
+		UINT64 v = *u.p32;
 		v |= v << 16;
 		v &= 0xffff0000ffffULL;
 		m_dataPos += 2;
 		return v;
 	}
 	UINT64 ReadDouble1() {
-		UINT64 v = *(UINT32 *) &m_data[m_dataPos];
+		union ptrunion {
+			UINT32 *p32;
+			DataT *d;
+		};
+		ptrunion u;
+		u.d = &m_data[m_dataPos];
+
+		UINT64 v = *u.p32;
 		v |= v << 16;
 		v &= 0xffff0000ffffULL;
 		m_dataPos += 2;
