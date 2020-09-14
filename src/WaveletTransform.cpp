@@ -229,6 +229,11 @@ void CWaveletTransform::InterleavedToSubbands(int destLevel, DataT* loRow, DataT
 	}
 }
 
+union ptrunion {
+	UINT64 *p64;
+	DataT *d;
+};
+
 typedef int16_t vec_s16 __attribute__ ((vector_size (16)));
 
 //////////////////////////////////////////////////////////////////////////
@@ -496,8 +501,29 @@ void CWaveletTransform::SubbandsToInterleaved(int srcLevel, DataT* loRow, DataT*
 			hhPos = hh.GetBuffPos();
 		}
 	#endif
+		UINT32 i = 0;
 
-		for (UINT32 i=0; i < wquot; i++) {
+		if ((((uint64_t) loRow) & 7) == 0 &&
+			(((uint64_t) hiRow) & 7) == 0 &&
+			ll.GetBuffPos() % 2 == 0 &&
+			lh.GetBuffPos() % 2 == 0 &&
+			hl.GetBuffPos() % 2 == 0 &&
+			hh.GetBuffPos() % 2 == 0) {
+
+			ptrunion louni, hiuni;
+			louni.d = loRow;
+			hiuni.d = hiRow;
+
+			for (; i < wquot - 1; i += 2) {
+				*louni.p64++ = ll.ReadDouble0() | hl.ReadDouble1();
+				*hiuni.p64++ = lh.ReadDouble0() | hh.ReadDouble1();
+			}
+
+			loRow = louni.d;
+			hiRow = hiuni.d;
+		}
+
+		for (; i < wquot; i++) {
 			*loRow++ = ll.ReadBuffer();// first access, than increment
 			*loRow++ = hl.ReadBuffer();// first access, than increment
 			*hiRow++ = lh.ReadBuffer();// first access, than increment

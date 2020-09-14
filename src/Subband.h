@@ -148,6 +148,21 @@ private:
 	void SetBuffer(DataT* b)			{ ASSERT(b); m_data = b; }
 	DataT ReadBuffer()					{ ASSERT(m_dataPos < m_size); return m_data[m_dataPos++]; }
 
+	UINT64 ReadDouble0() {
+		UINT64 v = *(UINT32 *) &m_data[m_dataPos];
+		v |= v << 16;
+		v &= 0xffff0000ffffULL;
+		m_dataPos += 2;
+		return v;
+	}
+	UINT64 ReadDouble1() {
+		UINT64 v = *(UINT32 *) &m_data[m_dataPos];
+		v |= v << 16;
+		v &= 0xffff0000ffffULL;
+		m_dataPos += 2;
+		return v << 16;
+	}
+
 	UINT32 GetBuffPos() const			{ return m_dataPos; }
 
 #ifdef __PGFROISUPPORT__
