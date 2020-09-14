@@ -235,6 +235,9 @@ union ptrunion {
 };
 
 typedef int16_t vec_s16 __attribute__ ((vector_size (16)));
+typedef uint16_t vec_u16 __attribute__ ((vector_size (16)));
+typedef long long vec_s64 __attribute__ ((vector_size (16)));
+
 
 //////////////////////////////////////////////////////////////////////////
 // Compute fast inverse wavelet transform of all 4 subbands of given level and
@@ -461,8 +464,64 @@ void CWaveletTransform::InverseRow(DataT* dest, UINT32 width) {
 	if (width >= FilterSize) {
 		UINT32 i = 2;
 
-		// left border handling
-		dest[0] -= ((dest[1] + c1) >> 1); // even
+		if ((((uint64_t) dest) & 15) == 0) {
+
+			const vec_s16 vc1 = (vec_s16) {
+				c1, c1, c1, c1,
+				c1, c1, c1, c1
+			};
+			const vec_s16 vc2 = (vec_s16) {
+				c2, c2, c2, c2,
+				c2, c2, c2, c2
+			};
+			const vec_s16 evens = (vec_s16) (vec_u16) {
+				0xffff, 0, 0xffff, 0,
+				0xffff, 0, 0xffff, 0,
+			};
+			vec_s16 previn = (vec_s16) { 0, dest[1], };
+
+			for (i = 0; i < width - 7; i += 8) {
+				vec_s16 in = *(vec_s16 *) &dest[i];
+				// shift the entire reg by 32
+				vec_s16 tmp = (vec_s16) __builtin_ia32_pslldqi128((vec_s64) in, 32);
+
+				tmp += previn + in + vc2;
+				tmp = __builtin_ia32_psrawi128(tmp, 2);
+				// 1, 3, 5, 7 are now added and shifted
+				tmp = (vec_s16) __builtin_ia32_psrldqi128((vec_s64) tmp, 16);
+				tmp &= evens;
+				in -= tmp;
+
+				// store the current 7 as 1 for next gen
+				previn = (vec_s16) __builtin_ia32_psrldqi128((vec_s64) in, 96);
+
+				// Evens have now been processed with unprocessed odds
+				// Odds are yet untouched, they will use processed evens
+
+				tmp = (vec_s16) __builtin_ia32_pslldqi128((vec_s64) in, 32);
+				tmp += in + vc1;
+				tmp = __builtin_ia32_psrawi128(tmp, 1);
+				// 2, 4, 6 are now added and shifted for 1,3,5 odds
+				tmp &= evens;
+				tmp = (vec_s16) __builtin_ia32_psrldqi128((vec_s64) tmp, 16);
+				in += tmp;
+
+				*(vec_s16 *) &dest[i] = in;
+				/*
+				dest[i] -= ((dest[i-1] + dest[i+1] + c2) >> 2); // even
+				dest[i-1] += ((dest[i-2] + dest[i] + c1) >> 1); // odd
+				*/
+
+				// Scalarly handle the previous 7 since it depends
+				// on the current 0
+				if (i) {
+					dest[i-1] += ((dest[i-2] + dest[i] + c1) >> 1); // odd
+				}
+			}
+		} else {
+			// left border handling
+			dest[0] -= ((dest[1] + c1) >> 1); // even
+		}
 
 		// middle part
 		for (; i < width - 1; i += 2) {
