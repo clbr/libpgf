@@ -58,7 +58,7 @@
 //-------------------------------------------------------------------------------
 //	Image constants
 //-------------------------------------------------------------------------------
-#define PGFMagic			"PGF"				///< PGF identification
+#define PGFMagic			"PGf"				///< PGF identification
 #define MaxLevel			30					///< maximum number of transform levels
 #define NSubbands			4					///< number of subbands per level
 #define MaxChannels			8					///< maximum number of (color) channels
