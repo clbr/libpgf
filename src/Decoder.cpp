@@ -195,7 +195,7 @@ CDecoder::CDecoder(CPGFStream* stream, PGFPreHeader& preHeader, PGFHeader& heade
 		m_stream->Read(&count, levelLength);
 		if (count != expected) ReturnWithError(MissingData);
 
-#ifdef PGF_USE_BIG_ENDIAN
+#ifndef PGF_USE_BIG_ENDIAN
 		// make sure the values are correct read
 		for (int i=0; i < header.nLevels; i++) {
 			levelLength[i] = __VAL(levelLength[i]);
@@ -638,6 +638,7 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 		} else {
 			count = expected = sizeof(UINT16);
 			m_stream->Read(&count, &wordLen);
+			wordLen = __VAL(wordLen);
 			if (count != expected) ReturnWithError(MissingData);
 			count = expected = wordLen;
 			m_stream->Read(&count, tmpbuf);
@@ -732,11 +733,12 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 			for (i = 0; i < numpatches; i++) {
 				count = expected = 2;
 				m_stream->Read(&count, &patchaddr);
+				patchaddr = __VAL(patchaddr);
 				if (count != expected) ReturnWithError(MissingData);
 				count = expected = 2;
 				m_stream->Read(&count, &patchval);
+				patchval = __VAL((UINT16) patchval);
 				if (count != expected) ReturnWithError(MissingData);
-
 				block->m_value[patchaddr] = patchval;
 			}
 		}

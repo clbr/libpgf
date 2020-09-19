@@ -569,7 +569,7 @@ __inline OSError SetFPos(HANDLE hFile, int posMode, INT64 posOff) {
 //-------------------------------------------------------------------------------
 //	Big Endian
 //-------------------------------------------------------------------------------
-#ifdef PGF_USE_BIG_ENDIAN
+#ifndef PGF_USE_BIG_ENDIAN
 
 #ifndef _lrotl
 	#define _lrotl(x,n)	(((x) << ((UINT32)(n))) | ((x) >> (32 - (UINT32)(n))))

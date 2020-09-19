@@ -212,7 +212,7 @@ UINT32 CEncoder::UpdateLevelLength() {
 	m_stream->SetPos(FSFromStart, m_levelLengthPos);
 
 	if (m_levelLength) {
-	#ifdef PGF_USE_BIG_ENDIAN
+	#ifndef PGF_USE_BIG_ENDIAN
 		UINT32 levelLength;
 		int count = WordBytes;
 
@@ -440,8 +440,9 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 
 			absbuf[i] = 1; // to avoid the -256 "minus zero"
 
-			patchaddr[numpatches] = i;
-			patchval[numpatches] = block->m_value[i];
+			UINT16 tmp = i;
+			patchaddr[numpatches] = __VAL(tmp);
+			patchval[numpatches] = __VAL((UINT16) block->m_value[i]);
 
 			numpatches++;
 		}
@@ -480,8 +481,9 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 		m_stream->Write(&count, &type);
 
 		count = sizeof(UINT16);
+		best = __VAL((UINT16) best);
 		m_stream->Write(&count, &best);
-		count = best;
+		count = __VAL((UINT16) best);
 		if (type == SC_FSE) {
 			m_stream->Write(&count, zopbuf);
 		} else if (type == SC_ZP) {
@@ -537,8 +539,9 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			m_stream->Write(&count, packedsign);
 		} else {
 			count = sizeof(UINT16);
+			best = __VAL((UINT16) best);
 			m_stream->Write(&count, &best);
-			count = best;
+			count = __VAL((UINT16) best);
 
 			if (type == SC_FSE) {
 				m_stream->Write(&count, zopbuf + 16384);
