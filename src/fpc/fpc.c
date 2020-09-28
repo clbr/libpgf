@@ -40,27 +40,8 @@
 #define MAX_HEADER_STAT_SIZE 128
 #define MIN_COMPRESSIBLE_SIZE 32
 
-#if UINTPTR_MAX > 0x100000000ULL
-#	define ARCH64
-#else
 #	define ARCH32
-#endif
 
-/*
-#ifdef ARCH64
-#	if MAX_BIT_LEN <= 11
-#		define RENORM_NUM 5
-#	else
-#		define RENORM_NUM 4
-#	endif
-#else
-#	if MAX_BIT_LEN <= 12
-#		define RENORM_NUM 2
-#	else
-#		define RENORM_NUM 1
-#	endif
-#endif
-*/
 #		define RENORM_NUM 1
 
 //special arch optimisations
@@ -122,7 +103,6 @@
 #	if (__GNUC__ * 100 + __GNUC_MINOR__ >= 403) ||\
 (defined(__clang__) && __has_builtin(__builtin_bswap32) && __has_builtin(__builtin_bswap64))
 #		define BSWAP32(x) __builtin_bswap32(x)
-#		define BSWAP64(x) __builtin_bswap64(x)
 #	endif
 #else
 #	define INLINE static inline
@@ -137,21 +117,10 @@
 		(((x) <<  8) & 0x00ff0000 ) |\
 		(((x) >>  8) & 0x0000ff00 ) |\
 		(((x) >> 24) & 0x000000ff )
-#	define BSWAP64(x) \
-		(((x) << 56) & 0xff00000000000000ULL) |\
-		(((x) << 40) & 0x00ff000000000000ULL) |\
-		(((x) << 24) & 0x0000ff0000000000ULL) |\
-		(((x) << 8)  & 0x000000ff00000000ULL) |\
-		(((x) >> 8)  & 0x00000000ff000000ULL) |\
-		(((x) >> 24) & 0x0000000000ff0000ULL) |\
-		(((x) >> 40) & 0x000000000000ff00ULL) |\
-		(((x) >> 56) & 0x00000000000000ffULL)
 #endif
 
 //types
 #define U16MAX 65535
-#define ARCH_SIZE sizeof(size_t)
-typedef uint64_t U64;
 typedef uint32_t U32;
 typedef uint16_t U16;
 typedef uint8_t U8;
@@ -235,22 +204,14 @@ typedef struct{
 
 LOAD(L16,U16,)
 LOAD(L32,U32,)
-LOAD(L64,U64,)
-LOAD(LARCH,size_t,)
 WRITE(W16,U16,)
 WRITE(W32,U32,)
-WRITE(W64,U64,)
-WRITE(WARCH,size_t,)
 
 #ifdef MEM_LITTLE_ENDIAN
 #	define L16_LE L16
 #	define L32_LE L32
-#	define L64_LE L64
-#	define LARCH_LE LARCH
 #	define W16_LE W16
 #	define W32_LE W32
-#	define W64_LE W64
-#	define WARCH_LE WARCH
 #else
 INLINE U16 L16_LE(const void* ptr)
 {
@@ -264,16 +225,7 @@ INLINE void W16_LE(void *ptr,U16 data)
 	p[1] = (U8)(data >> 8);
 }
 	LOAD(L32_LE,U32,BSWAP32)
-	LOAD(L64_LE,U64,BSWAP64)
 	WRITE(W32_LE,U32,)
-	WRITE(W64_LE,U64,)
-#	ifdef ARCH64
-		LOAD(LARCH_LE,size_t,BSWAP64)
-		WRITE(WARCH_LE,size_t,BSWAP64)
-#	else
-		LOAD(LARCH_LE,size_t,BSWAP32)
-		WRITE(WARCH_LE,size_t,BSWAP32)
-#	endif
 #endif
 
 /* compute table
@@ -760,7 +712,7 @@ INLINE int prefix_codes_encode(U8 *dest,U8 *src,int sym_num,const Enode *lookup)
 	U8 *src_end = src + sym_num - (sym_num%(RENORM_NUM*NUM_STREAMS));
 	U8 *dest_start = dest,sym,bl;
 	U32 bits_av = 0,tmp;
-	size_t bits = 0,code;
+	U32 bits = 0,code;
 
 	while(src < src_end){
 		REPEAT(RENORM_NUM,
@@ -771,7 +723,7 @@ INLINE int prefix_codes_encode(U8 *dest,U8 *src,int sym_num,const Enode *lookup)
 			bits |= code << bits_av;
 			bits_av += bl;
 		)
-		WARCH_LE(dest,bits);
+		W32_LE(dest,bits);
 		tmp = bits_av >> 3;
 		bits_av &= 7;
 		bits >>= tmp << 3;
@@ -789,26 +741,21 @@ INLINE int prefix_codes_encode(U8 *dest,U8 *src,int sym_num,const Enode *lookup)
 		bits_av += bl;
 	}
 	//renormalise
-	WARCH_LE(dest,bits);
+	W32_LE(dest,bits);
 	dest += (bits_av+7) >> 3;
 
 	return dest - dest_start;
 }
 
 
-#ifdef ARCH64
-#	define SUB_CONST 63
-#	define OR_CONST 56
-#else
 #	define SUB_CONST 31
 #	define OR_CONST 24
-#endif
 
 #define PREFETCH_STREAM(A)\
 	PREFETCH(stream_pos##A+320);
 
 #define RENORM_DEC(A){\
-	bits##A |= LARCH_LE(stream_pos##A) << bits_av##A;\
+	bits##A |= L32_LE(stream_pos##A) << bits_av##A;\
 	stream_pos##A += (SUB_CONST - bits_av##A) >> 3;\
 	bits_av##A |= OR_CONST;\
 }
@@ -817,11 +764,11 @@ INLINE int prefix_codes_encode(U8 *dest,U8 *src,int sym_num,const Enode *lookup)
 	if(bits_av##A < MAX_BIT_LEN){\
 		int dist;\
 		if((dist = stream_end - stream_pos##A) > 1){\
-			bits##A |= ((size_t)L16_LE(stream_pos##A)) << bits_av##A;\
+			bits##A |= ((U32)L16_LE(stream_pos##A)) << bits_av##A;\
 			stream_pos##A += 2;\
 			bits_av##A += 16;\
 		}else if (dist > 0){\
-			bits##A |= ((size_t)*stream_pos##A) << bits_av##A;\
+			bits##A |= ((U32)*stream_pos##A) << bits_av##A;\
 			stream_pos##A ++;\
 			bits_av##A += 8;\
 		}\
@@ -851,7 +798,7 @@ INLINE int prefix_codes_encode(U8 *dest,U8 *src,int sym_num,const Enode *lookup)
 
 #define DEC_DECLARE(A)\
 	U32 bits_av##A = 0;\
-	size_t bits##A = 0;\
+	U32 bits##A = 0;\
 	U8 *stream_pos##A;
 
 #define TEST_STREAM_END(A)\
@@ -870,7 +817,7 @@ int prefix_codes_decode(U8 *dest,int dest_size,U8 *src,int src_size,const Dnode 
 	CHECK(src + HEADER_SIZE > stream_end)
 		return 1;
 
-	stream_end -= UNROLL_NUM * ARCH_SIZE;
+	stream_end -= UNROLL_NUM * sizeof(U32);
 
 	REPEAT_ARG(DEC(NUM_STREAMS),DEC_INIT)
 	CAT(stream_pos,DEC(NUM_STREAMS)) = other;
@@ -891,7 +838,7 @@ int prefix_codes_decode(U8 *dest,int dest_size,U8 *src,int src_size,const Dnode 
 		)
 	}
 	//finalise
-	stream_end += UNROLL_NUM * ARCH_SIZE;
+	stream_end += UNROLL_NUM * sizeof(U32);
 
 	dest_end += dest_size%(RENORM_NUM * NUM_STREAMS);
 	while(1){
