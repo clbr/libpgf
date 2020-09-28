@@ -755,9 +755,11 @@ INLINE int prefix_codes_encode(U8 *dest,U8 *src,int sym_num,const Enode *lookup)
 	PREFETCH(stream_pos##A+320);
 
 #define RENORM_DEC(A){\
-	bits##A |= L32_LE(stream_pos##A) << bits_av##A;\
-	stream_pos##A += (SUB_CONST - bits_av##A) >> 3;\
-	bits_av##A |= OR_CONST;\
+	while (bits_av##A < 24) {\
+		bits##A |= ((U32)*stream_pos##A) << bits_av##A;\
+		stream_pos##A++;\
+		bits_av##A += 8;\
+	}\
 }
 
 #define RENORM_DEC_END(A)\
