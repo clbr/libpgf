@@ -35,6 +35,7 @@
 #include "fse/fse.h"
 #include "lz4/lz4hc.h"
 #include "srle/sparserle.h"
+#include "tunstall/tunstall.h"
 #include "zeropack/zeropack.h"
 
 //////////////////////////////////////////////////////
@@ -418,7 +419,8 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 #endif
 
 	UINT8 absbuf[16384], packedsign[2048], zopbuf[32768],
-		rlebuf[16384], rlebitbuf[16384], zprbuf[16384];
+		rlebuf[16384], rlebitbuf[16384], zprbuf[16384],
+		tunstallbuf[16384 + 768];
 	unsigned i, zerocheck = 0, numpatches = 0;
 	#define MAX_PATCH 64
 	UINT16 patchaddr[MAX_PATCH];
@@ -455,6 +457,7 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 		uint16_t rlesize = sparserle_comp(absbuf, rlebuf, 16384);
 		uint16_t rlebitsize = sparsebitrle_comp(absbuf, rlebitbuf, 16384);
 		const uint16_t zprsize = zeropack_comp_rec(absbuf, zprbuf, 16384);
+		const uint16_t tunstallsize = tunstall_comp(absbuf, tunstallbuf, 16384);
 		if (outsize < 2)
 			abort();
 
@@ -467,6 +470,10 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 		if (zprsize < best) {
 			type = SC_ZP;
 			best = zprsize;
+		}
+		if (tunstallsize < best) {
+			type = SC_TUNSTALL;
+			best = tunstallsize;
 		}
 		if (rlebitsize < best + 16) {
 			type = SC_SRLE_BIT;
@@ -488,6 +495,8 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			m_stream->Write(&count, zopbuf);
 		} else if (type == SC_ZP) {
 			m_stream->Write(&count, zprbuf);
+		} else if (type == SC_TUNSTALL) {
+			m_stream->Write(&count, tunstallbuf);
 		} else if (type == SC_SRLE) {
 			m_stream->Write(&count, rlebuf);
 		} else if (type == SC_SRLE_BIT) {

@@ -35,6 +35,7 @@
 #include "fse/fse.h"
 #include "lz4/lz4.h"
 #include "srle/sparserle.h"
+#include "tunstall/tunstall.h"
 #include "zeropack/zeropack.h"
 
 //////////////////////////////////////////////////////
@@ -618,6 +619,8 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 			FSE_decompress(absbuf, BufferSize, tmpbuf, wordLen);
 		else if (type == SC_ZP)
 			zeropack_decomp_rec(tmpbuf, absbuf, 16384);
+		else if (type == SC_TUNSTALL)
+			tunstall_decomp(tmpbuf, absbuf, 16384);
 		else if (type == SC_SRLE)
 			sparserle_decomp(tmpbuf, absbuf, wordLen);
 		else if (type == SC_SRLE_BIT)

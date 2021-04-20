@@ -22,6 +22,9 @@ libpgf_la_SOURCES = \
 	srle/sparserle.c \
 	srle/sparsebitrle.c \
 	\
+	tunstall/tunstall.cpp \
+	tunstall/tunstall_dec.c \
+	\
 	zeropack/compress.c \
 	zeropack/zeropack.c \
 	\
