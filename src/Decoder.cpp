@@ -31,6 +31,7 @@
 	#include <stdio.h>
 #endif
 
+#include "bitpack/bitpack.h"
 #include "fpc/fpc.h"
 #include "fse/fse.h"
 #include "lz4/lz4.h"
@@ -625,6 +626,8 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 			sparserle_decomp(tmpbuf, absbuf, wordLen);
 		else if (type == SC_SRLE_BIT)
 			sparsebitrle_decomp(tmpbuf, absbuf, 16384);
+		else if (type == SC_BP)
+			bitpack_decomp(tmpbuf, absbuf, 16384);
 		else
 			FPC_decompress(absbuf, BufferSize, tmpbuf, wordLen);
 
