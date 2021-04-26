@@ -628,6 +628,8 @@ void CDecoder::ReadMacroBlock(CMacroBlock* block) {
 			sparsebitrle_decomp(tmpbuf, absbuf, 16384);
 		else if (type == SC_BP)
 			bitpack_decomp(tmpbuf, absbuf, 16384);
+		else if (type == SC_SB2)
+			sb2_decomp(tmpbuf, absbuf, 16384);
 		else
 			FPC_decompress(absbuf, BufferSize, tmpbuf, wordLen);
 

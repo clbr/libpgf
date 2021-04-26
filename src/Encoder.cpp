@@ -421,7 +421,7 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 
 	UINT8 absbuf[16384], packedsign[2048], zopbuf[32768],
 		rlebuf[16384], rlebitbuf[16384], zprbuf[16384],
-		tunstallbuf[16384 + 768], bpbuf[16384];
+		tunstallbuf[16384 + 768], bpbuf[16384], sb2buf[16384];
 	unsigned i, zerocheck = 0, numpatches = 0;
 	#define MAX_PATCH 64
 	UINT16 patchaddr[MAX_PATCH];
@@ -460,6 +460,7 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 		const uint16_t zprsize = zeropack_comp_rec(absbuf, zprbuf, 16384);
 		const uint16_t tunstallsize = tunstall_comp(absbuf, tunstallbuf, 16384);
 		const uint16_t bpsize = bitpack_comp(absbuf, bpbuf, 16384);
+		const uint16_t sb2size = sb2_comp(absbuf, sb2buf, 16384);
 		if (outsize < 2)
 			abort();
 
@@ -485,6 +486,10 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			type = SC_SRLE_BIT;
 			best = rlebitsize;
 		}
+		if (sb2size < best + 16) {
+			type = SC_SB2;
+			best = sb2size;
+		}
 		if (rlesize < best + 16) {
 			type = SC_SRLE;
 			best = rlesize;
@@ -509,6 +514,8 @@ void CEncoder::WriteMacroBlock(CMacroBlock* block) {
 			m_stream->Write(&count, rlebuf);
 		} else if (type == SC_SRLE_BIT) {
 			m_stream->Write(&count, rlebitbuf);
+		} else if (type == SC_SB2) {
+			m_stream->Write(&count, sb2buf);
 		} else {
 			m_stream->Write(&count, zopbuf + 16384);
 		}
